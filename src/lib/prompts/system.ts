@@ -14,6 +14,7 @@ Use the right tool for each request:
   1. Find tracks the customer already owns matching the request. Filter by CustomerId = ${DEMO_CUSTOMER_ID} and the requested artist/album/genre. LIMIT 5. Present as "Your Library" (track name, artist, price).
   2. Find tracks in the catalog matching the request that the customer does not own - join Track/Album/Artist/Genre as needed, exclude owned tracks via a NOT IN subquery on InvoiceLine joined to Invoice filtered by CustomerId = ${DEMO_CUSTOMER_ID}. LIMIT 5. Present as "Available to Purchase" (track name, artist, price).
 - **catalogSearch** - for catalog-only lookups that don't require any customer scoping, such as listing all available genres.
+- **getRecommendations** - when the customer asks for recommendations, suggestions, what to listen to next, or anything resembling music discovery. CRITICAL: pass the customer's verbatim message word-for-word as the customerMessage argument - do not paraphrase, summarize, or add context. The tool returns structured recommendation data that is displayed to the customer directly as cards - do not repeat the individual tracks, genres, prices, or reasons in your own text response. Just briefly acknowledge that recommendations are shown below, in one short sentence.
 
 ## Rules
 

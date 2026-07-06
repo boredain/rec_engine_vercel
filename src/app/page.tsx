@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useChat } from "@ai-sdk/react";
+import type { RecommendationItem } from "@/lib/tools/getRecommendations";
 
 export default function Home() {
   const { messages, status, sendMessage } = useChat();
@@ -33,6 +34,34 @@ export default function Home() {
                 switch (part.type) {
                   case "text":
                     return <span key={index}>{part.text}</span>;
+                  case "tool-getRecommendations":
+                    switch (part.state) {
+                      case "input-streaming":
+                      case "input-available":
+                        return (
+                          <RecommendationCards
+                            key={index}
+                            loading
+                            recommendations={[]}
+                          />
+                        );
+                      case "output-available":
+                        return (
+                          <RecommendationCards
+                            key={index}
+                            loading={false}
+                            recommendations={
+                              (
+                                part.output as {
+                                  recommendations: RecommendationItem[];
+                                }
+                              ).recommendations
+                            }
+                          />
+                        );
+                      default:
+                        return null;
+                    }
                   default:
                     return null;
                 }
@@ -61,6 +90,42 @@ export default function Home() {
           Send
         </button>
       </form>
+    </div>
+  );
+}
+
+function RecommendationCards({
+  loading,
+  recommendations,
+}: {
+  loading: boolean;
+  recommendations: RecommendationItem[];
+}) {
+  if (loading) {
+    return (
+      <div className="mt-2 space-y-2">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-16 w-64 animate-pulse rounded-lg bg-gray-300"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-2 text-left">
+      {recommendations.map((rec, i) => (
+        <div key={i} className="w-64 rounded-lg border bg-white p-3 shadow-sm">
+          <div className="font-semibold">{rec.trackName}</div>
+          <div className="text-sm text-gray-600">{rec.artistName}</div>
+          <div className="text-xs text-gray-500">
+            {rec.genre} - ${rec.price.toFixed(2)}
+          </div>
+          <div className="mt-1 text-xs italic text-gray-700">{rec.why}</div>
+        </div>
+      ))}
     </div>
   );
 }
