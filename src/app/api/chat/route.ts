@@ -37,10 +37,10 @@ export async function POST(req: Request) {
     stopWhen: stepCountIs(8),
     // Emits this call (and any nested tool-call LLM calls, e.g.
     // getRecommendations' internal generateText loop) as OpenTelemetry spans.
-    // Requires src/instrumentation.ts's registerOTel() and Session Tracing
-    // enabled via the Vercel Toolbar on a deployed preview/prod URL to view -
-    // see ARCHITECTURE.md.
-    experimental_telemetry: {
+    // Requires src/instrumentation.ts's registerOTel() + registerTelemetry()
+    // and Session Tracing enabled via the Vercel Toolbar on a deployed
+    // preview/prod URL to view - see ARCHITECTURE.md.
+    telemetry: {
       isEnabled: true,
       functionId: "main-agent",
       recordInputs: true,
