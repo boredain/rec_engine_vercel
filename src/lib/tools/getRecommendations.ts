@@ -1,10 +1,19 @@
-import { generateText, tool, stepCountIs } from "ai";
+import { generateObject, tool } from "ai";
 import { z } from "zod";
 import { gateway } from "@ai-sdk/gateway";
-import { getRecommendationsPrompt } from "../prompts/recommendations";
-import { getSchema } from "./getSchema";
-import { generalQuery } from "./generalQuery";
-import { catalogSearch } from "./catalogSearch";
+import { DEMO_CUSTOMER_ID } from "../config";
+import {
+  getGenreList,
+  getTopGenres,
+  getOwnedArtistIds,
+  getOwnedTrackIds,
+  getPlaylistIdsForTracks,
+  getCoOccurrenceCandidates,
+  getGenreOwnedArtistFallback,
+  getGenreNewArtistFallback,
+} from "../recommendations/queries";
+import { tierFromCoOccurrence, tagTier, type RankedPick } from "../recommendations/rank";
+import { getParseIntentPrompt, getExplainPicksPrompt } from "../prompts/recommendations";
 
 const recommendationItemSchema = z.object({
   trackName: z.string(),
@@ -27,37 +36,98 @@ export const getRecommendations = tool({
       .describe("The customer's original message, copied verbatim"),
   }),
   execute: async ({ customerMessage }) => {
-    let captured: RecommendationItem[] | null = null;
+    const genreList = await getGenreList();
 
-    const submitRecommendations = tool({
-      description:
-        "Submit the final list of recommendations. Call this exactly once when done.",
-      inputSchema: z.object({
-        recommendations: z.array(recommendationItemSchema),
-      }),
-      execute: async ({ recommendations }) => {
-        captured = recommendations;
-        return "Recommendations submitted.";
-      },
-    });
-
-    await generateText({
+    // The only judgment call that genuinely needs a model: did the customer
+    // mention a specific genre/mood, or is this a generic request? Everything
+    // downstream is deterministic (see queries.ts + rank.ts).
+    const { object: intent } = await generateObject({
       model: gateway("anthropic/claude-haiku-4.5"),
-      system: getRecommendationsPrompt(),
+      schema: z.object({
+        statedGenreId: z
+          .number()
+          .nullable()
+          .describe(
+            "GenreId matching a genre/mood the customer explicitly mentioned, or null if generic",
+          ),
+      }),
+      system: getParseIntentPrompt(genreList),
       prompt: customerMessage,
-      tools: { getSchema, generalQuery, catalogSearch, submitRecommendations },
-      stopWhen: stepCountIs(10),
-      // Traced as a child span under the main agent's streamText call (see
-      // route.ts) - this is the nested agentic loop that currently issues
-      // 6-8 sequential LLM round trips per recommendation request.
-      telemetry: {
-        isEnabled: true,
-        functionId: "recommendations-subagent",
-        recordInputs: true,
-        recordOutputs: true,
-      },
+      telemetry: { isEnabled: true, functionId: "recommendations-parse-intent" },
     });
 
-    return { recommendations: captured ?? [] };
+    const [topGenres, ownedArtists, ownedTrackIds] = await Promise.all([
+      getTopGenres(DEMO_CUSTOMER_ID),
+      getOwnedArtistIds(DEMO_CUSTOMER_ID),
+      getOwnedTrackIds(DEMO_CUSTOMER_ID),
+    ]);
+
+    const targetGenreId = intent.statedGenreId ?? topGenres[0]?.GenreId;
+    const ownedArtistIdList = ownedArtists.map((a) => a.ArtistId);
+    const ownedArtistIdSet = new Set(ownedArtistIdList);
+
+    let picks: RankedPick[] = [];
+
+    if (targetGenreId !== undefined) {
+      const playlistIds = await getPlaylistIdsForTracks(ownedTrackIds);
+      const round3 = await getCoOccurrenceCandidates(playlistIds, ownedTrackIds);
+      picks = tierFromCoOccurrence(round3, ownedArtistIdSet).slice(0, 5);
+
+      if (picks.length < 5) {
+        const round4 = await getGenreOwnedArtistFallback(
+          targetGenreId,
+          ownedArtistIdList,
+          ownedTrackIds,
+        );
+        picks = [...picks, ...tagTier(round4, 3)].slice(0, 5);
+      }
+      if (picks.length < 5) {
+        const round5 = await getGenreNewArtistFallback(
+          targetGenreId,
+          ownedArtistIdList,
+          ownedTrackIds,
+        );
+        picks = [...picks, ...tagTier(round5, 4)].slice(0, 5);
+      }
+    }
+
+    if (picks.length === 0) {
+      return { recommendations: [] };
+    }
+
+    // Track name/artist/price/genre are echoed straight from the DB rows
+    // below - the model only ever generates the "why" text, so it has no
+    // opportunity to hallucinate a track that doesn't exist or misquote a
+    // price.
+    const { object: explained } = await generateObject({
+      model: gateway("anthropic/claude-haiku-4.5"),
+      schema: z.object({
+        whys: z.array(z.string()).length(picks.length),
+      }),
+      system: getExplainPicksPrompt(),
+      prompt: JSON.stringify({
+        customerMessage,
+        topGenre: topGenres[0]?.Name,
+        topArtist: ownedArtists[0]?.Name,
+        picks: picks.map((p) => ({
+          trackName: p.Name,
+          artistName: p.ArtistName,
+          genre: p.GenreName,
+          tier: p.tier,
+          coOccurrenceCount: p.CoOccurrenceCount ?? null,
+        })),
+      }),
+      telemetry: { isEnabled: true, functionId: "recommendations-explain-picks" },
+    });
+
+    const recommendations: RecommendationItem[] = picks.map((p, i) => ({
+      trackName: p.Name,
+      artistName: p.ArtistName,
+      genre: p.GenreName,
+      price: p.UnitPrice,
+      why: explained.whys[i],
+    }));
+
+    return { recommendations };
   },
 });

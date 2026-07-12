@@ -127,11 +127,13 @@ function RecommendationCards({
   recommendations: RecommendationItem[];
 }) {
   if (loading) {
+    // A small fixed-size indicator instead of stacked skeleton blocks - its
+    // size doesn't grow with how long the backend takes, so it reads as
+    // "working" rather than a stuck/broken layout during a slow call.
     return (
-      <div className="mt-2 space-y-2">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-16 w-full animate-pulse rounded-lg bg-card-border" />
-        ))}
+      <div className="mt-2 flex items-center gap-2 text-sm text-muted">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
+        Finding recommendations...
       </div>
     );
   }
