@@ -35,6 +35,17 @@ export async function POST(req: Request) {
     // Caps the model at 8 tool-call round trips in a single turn - a safety/
     // cost limit so a confused model can't loop on tool calls indefinitely.
     stopWhen: stepCountIs(8),
+    // Emits this call (and any nested tool-call LLM calls, e.g.
+    // getRecommendations' internal generateText loop) as OpenTelemetry spans.
+    // Requires src/instrumentation.ts's registerOTel() and Session Tracing
+    // enabled via the Vercel Toolbar on a deployed preview/prod URL to view -
+    // see ARCHITECTURE.md.
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: "main-agent",
+      recordInputs: true,
+      recordOutputs: true,
+    },
   });
 
   // Converts the streaming result into the exact wire format useChat expects,

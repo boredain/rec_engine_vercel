@@ -47,6 +47,15 @@ export const getRecommendations = tool({
       prompt: customerMessage,
       tools: { getSchema, generalQuery, catalogSearch, submitRecommendations },
       stopWhen: stepCountIs(10),
+      // Traced as a child span under the main agent's streamText call (see
+      // route.ts) - this is the nested agentic loop that currently issues
+      // 6-8 sequential LLM round trips per recommendation request.
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "recommendations-subagent",
+        recordInputs: true,
+        recordOutputs: true,
+      },
     });
 
     return { recommendations: captured ?? [] };
