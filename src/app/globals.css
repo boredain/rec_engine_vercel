@@ -3,6 +3,14 @@
    throughout page.tsx into actual visible styling. */
 @import "tailwindcss";
 
+/* Tells Tailwind to scan streamdown's own compiled JS for the utility
+   classes its components use internally, so those classes actually get
+   generated - without this, Streamdown renders with missing backgrounds/
+   borders/spacing. Path verified via `path.relative()` against this
+   project's actual src/app/ location - one extra "../" versus streamdown's
+   own README example, which assumes globals.css lives in app/ directly. */
+@source "../../node_modules/streamdown/dist/*.js";
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -20,6 +28,22 @@
   --chat-divider: #eeeeed;
   --input-border: #d8d8d6;
   --input-bg: #fafafa;
+
+  /* Streamdown's components are built on shadcn/ui's token names, which
+     this project doesn't otherwise use. Confirmed (by reading streamdown's
+     own styles.css) that streamdown ships zero color/spacing defaults of
+     its own - only animation keyframes - so these have to come from here,
+     mapped to match the existing white/ink palette above rather than
+     streamdown's oklch grayscale example, so rendered Markdown blends in
+     instead of clashing. */
+  --card: #ffffff;
+  --card-foreground: var(--ink);
+  --muted-foreground: var(--muted);
+  --border: var(--card-border);
+  --input: var(--input-border);
+  --primary: var(--ink);
+  --primary-foreground: #ffffff;
+  --radius: 0.5rem;
 }
 
 /* Tailwind v4's CSS-based theme config: maps our own CSS variables (and the
