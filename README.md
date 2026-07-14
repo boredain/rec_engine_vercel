@@ -39,6 +39,17 @@ The main agent never sees the intermediate SQL or ranking logic — it receives 
 - **Vercel AI Gateway** — model routing (Claude Sonnet for orchestration, Claude Haiku for the recommendations subagent) through a single provider-agnostic interface
 - **Turso (libSQL)** — serverless, SQLite-compatible database hosting the Chinook dataset
 
+## Rendering & caching
+
+The homepage composes four different rendering strategies on one route (Next.js 16 Cache Components / Partial Prerendering), instead of picking one for the whole page:
+
+- **`Greeting`** — cached long-term. Static only because the demo customer ID is hardcoded; production would key the cache per logged-in customer.
+- **`TrendingTracks`** — cached for a week. An aggregate across every customer, not personal data, so staleness is cheap.
+- **`RecentPurchases`** — deliberately never cached, and streamed in via Suspense. Must reflect a new purchase immediately, or the UI would visibly contradict itself.
+- **The chat UI** — the one Client Component on the page, since it's the only part that needs to hold live, evolving state (the conversation, streaming tokens) in the browser.
+
+Caching decisions are made on three factors, not just speed and cost: compute cost, latency, and the risk of a stale answer being outright *wrong*, not just slow. `RecentPurchases` is the clearest example — it trades a little latency specifically to guarantee correctness. 
+
 ## Built for a real production path, not just a demo
 
 A few design decisions here are specifically about what it takes to take this from a portfolio demo to something a real business could run:
